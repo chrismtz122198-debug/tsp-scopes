@@ -1,0 +1,907 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#0f1e3d">
+<title>TSP Scope Tracker</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=DM+Mono:wght@400;500&family=Sora:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --navy: #0f1e3d;
+  --navy-mid: #1a2f5a;
+  --navy-light: #243f72;
+  --accent: #f5a623;
+  --accent-dim: #c47e0d;
+  --red: #e53e3e;
+  --green: #38a169;
+  --blue: #3182ce;
+  --yellow: #d69e2e;
+  --bg: #f4f5f7;
+  --surface: #ffffff;
+  --surface2: #f8f9fb;
+  --border: #e2e5eb;
+  --text: #1a202c;
+  --text2: #4a5568;
+  --text3: #718096;
+  --mono: 'DM Mono', monospace;
+  --sans: 'Sora', sans-serif;
+  --radius: 10px;
+  --radius-lg: 14px;
+  --shadow: 0 2px 8px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.12);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:var(--sans);background:var(--bg);color:var(--text);font-size:15px}
+button,input,select,textarea{font-family:var(--sans)}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--navy);color:#fff;padding:0 16px;height:58px;display:flex;align-items:center;justify-content:space-between;gap:12px;position:sticky;top:0;z-index:50;box-shadow:0 2px 12px rgba(0,0,0,0.25)}
+.topbar-left{display:flex;align-items:center;gap:12px}
+.logo{width:36px;height:36px;background:var(--accent);border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.logo svg{width:20px;height:20px;fill:#fff}
+.app-name{font-size:17px;font-weight:600;letter-spacing:-0.02em}
+.app-sub{font-size:11px;color:rgba(255,255,255,0.55);font-family:var(--mono);margin-top:1px}
+.topbar-right{display:flex;align-items:center;gap:8px}
+.user-chip{display:flex;align-items:center;gap:7px;background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.15);border-radius:20px;padding:4px 10px 4px 6px;cursor:pointer;transition:background .15s}
+.user-chip:hover{background:rgba(255,255,255,0.18)}
+.user-avatar{width:26px;height:26px;border-radius:50%;background:var(--accent);display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff}
+.user-name-chip{font-size:12px;color:#fff}
+
+/* ── TABS ── */
+.tab-bar{background:var(--surface);border-bottom:1px solid var(--border);display:flex;padding:0 16px;gap:0;overflow-x:auto;position:sticky;top:58px;z-index:40}
+.tab-bar::-webkit-scrollbar{display:none}
+.tab{padding:13px 16px;font-size:13px;font-weight:500;color:var(--text3);border-bottom:2.5px solid transparent;cursor:pointer;white-space:nowrap;display:flex;align-items:center;gap:6px;transition:color .15s}
+.tab:hover{color:var(--text)}
+.tab.active{color:var(--navy);border-bottom-color:var(--accent);font-weight:600}
+.tab-icon{font-size:16px;line-height:1}
+
+/* ── LAYOUT ── */
+.content{max-width:900px;margin:0 auto;padding:20px 16px 80px}
+.section{display:none}.section.active{display:block}
+
+/* ── STATS ── */
+.stats-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:20px}
+@media(max-width:600px){.stats-grid{grid-template-columns:repeat(2,1fr)}}
+.stat-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px 16px;box-shadow:var(--shadow)}
+.stat-num{font-size:28px;font-weight:600;line-height:1;font-family:var(--mono)}
+.stat-lbl{font-size:11px;color:var(--text3);margin-top:4px;font-weight:500;text-transform:uppercase;letter-spacing:.04em}
+.stat-card.blue .stat-num{color:var(--blue)}
+.stat-card.green .stat-num{color:var(--green)}
+.stat-card.yellow .stat-num{color:var(--yellow)}
+
+/* ── FILTER ROW ── */
+.filter-row{display:flex;gap:8px;margin-bottom:16px;flex-wrap:wrap}
+.filter-row input[type=text]{flex:1;min-width:160px;height:38px;padding:0 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text)}
+.filter-row input[type=text]:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(15,30,61,0.08)}
+.filter-row select{height:38px;padding:0 10px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text);cursor:pointer}
+.btn-new{height:38px;padding:0 16px;background:var(--navy);color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer;display:flex;align-items:center;gap:6px;white-space:nowrap;transition:background .15s}
+.btn-new:hover{background:var(--navy-mid)}
+
+/* ── TICKET CARD ── */
+.ticket-list{display:flex;flex-direction:column;gap:10px}
+.ticket-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);overflow:hidden;box-shadow:var(--shadow);transition:box-shadow .15s}
+.ticket-card:hover{box-shadow:var(--shadow-lg)}
+.ticket-card.pri-high{border-left:4px solid var(--red)}
+.ticket-card.pri-med{border-left:4px solid var(--yellow)}
+.ticket-card.pri-low{border-left:4px solid var(--green)}
+.ticket-head{padding:14px 16px;cursor:pointer;display:flex;align-items:flex-start;gap:12px}
+.tc-main{flex:1;min-width:0}
+.tc-id{font-family:var(--mono);font-size:11px;color:var(--text3);font-weight:500;margin-bottom:3px}
+.tc-title{font-size:15px;font-weight:600;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tc-meta{display:flex;gap:6px;margin-top:7px;flex-wrap:wrap;align-items:center}
+.badge{font-size:11px;padding:3px 9px;border-radius:20px;font-weight:600;font-family:var(--mono)}
+.badge-pending{background:#edf2f7;color:#4a5568}
+.badge-inprogress{background:#ebf8ff;color:#2b6cb0}
+.badge-complete{background:#f0fff4;color:#276749}
+.badge-issue{background:#fffaf0;color:#c05621}
+.badge-crew{background:#f0e7ff;color:#6b21a8;font-family:var(--sans);font-size:11px;padding:2px 8px}
+.meta-icon{font-size:12px;color:var(--text3);display:flex;align-items:center;gap:3px}
+.tc-actions{display:flex;gap:6px;align-items:flex-start;flex-shrink:0}
+.icon-btn{width:32px;height:32px;border:1px solid var(--border);border-radius:8px;background:var(--surface2);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:var(--text3);transition:all .15s}
+.icon-btn:hover{background:var(--bg);color:var(--text);border-color:var(--text3)}
+.icon-btn.danger:hover{background:#fff5f5;color:var(--red);border-color:#fc8181}
+.icon-btn.success:hover{background:#f0fff4;color:var(--green);border-color:#68d391}
+
+/* ── EXPAND BODY ── */
+.expand-body{display:none;border-top:1px solid var(--border);padding:16px;background:var(--surface2)}
+.ticket-card.open .expand-body{display:block}
+.expand-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-bottom:16px}
+@media(max-width:560px){.expand-grid{grid-template-columns:1fr}}
+.info-block{margin-bottom:10px}
+.info-label{font-size:11px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px}
+.info-value{font-size:13px;color:var(--text)}
+.crew-chips{display:flex;gap:5px;flex-wrap:wrap;margin-top:4px}
+
+/* ── PHOTOS ── */
+.photo-section{margin-bottom:14px}
+.section-title{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.05em;margin-bottom:8px;display:flex;align-items:center;justify-content:space-between}
+.photo-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(90px,1fr));gap:8px}
+.photo-thumb{position:relative;aspect-ratio:1;border-radius:8px;overflow:hidden;border:1px solid var(--border);background:var(--bg);cursor:pointer}
+.photo-thumb img{width:100%;height:100%;object-fit:cover}
+.photo-thumb .photo-worker{position:absolute;bottom:0;left:0;right:0;background:rgba(15,30,61,0.75);color:#fff;font-size:9px;padding:3px 5px;font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.photo-thumb .photo-del{position:absolute;top:3px;right:3px;width:18px;height:18px;background:rgba(229,62,62,0.9);border-radius:50%;display:none;align-items:center;justify-content:center;cursor:pointer;font-size:11px;color:#fff;border:none}
+.photo-thumb:hover .photo-del{display:flex}
+.photo-add-btn{aspect-ratio:1;border-radius:8px;border:1.5px dashed var(--border);background:var(--surface);display:flex;flex-direction:column;align-items:center;justify-content:center;cursor:pointer;gap:4px;color:var(--text3);font-size:11px;transition:all .15s}
+.photo-add-btn:hover{border-color:var(--navy);color:var(--navy);background:var(--surface2)}
+.photo-add-btn span:first-child{font-size:20px}
+
+/* ── ACTIVITY LOG ── */
+.log-list{display:flex;flex-direction:column}
+.log-entry{display:flex;gap:10px;padding:10px 0;border-bottom:1px solid var(--border)}
+.log-entry:last-child{border-bottom:none}
+.log-dot-wrap{display:flex;flex-direction:column;align-items:center;gap:0}
+.log-dot{width:10px;height:10px;border-radius:50%;background:var(--navy);flex-shrink:0;margin-top:3px}
+.log-dot.photo{background:var(--blue)}
+.log-dot.status{background:var(--green)}
+.log-dot.issue{background:var(--red)}
+.log-dot.create{background:var(--accent)}
+.log-body{flex:1;min-width:0}
+.log-text{font-size:13px;color:var(--text);line-height:1.5}
+.log-text strong{color:var(--navy)}
+.log-time{font-size:11px;color:var(--text3);font-family:var(--mono);margin-top:2px}
+.status-tag{display:inline-block;font-size:10px;padding:1px 7px;border-radius:20px;font-weight:600;margin-left:5px;vertical-align:middle}
+
+/* ── CREW ── */
+.crew-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:10px;margin-bottom:16px}
+.crew-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:14px;display:flex;align-items:center;gap:12px;box-shadow:var(--shadow)}
+.avatar{width:40px;height:40px;border-radius:50%;background:var(--navy);display:flex;align-items:center;justify-content:center;color:#fff;font-size:14px;font-weight:600;flex-shrink:0}
+.crew-name{font-size:14px;font-weight:600}
+.crew-role{font-size:12px;color:var(--text3);margin-top:1px}
+.crew-scopes{font-size:11px;color:var(--blue);margin-top:3px;font-family:var(--mono)}
+.add-crew-card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius-lg);padding:18px;box-shadow:var(--shadow)}
+.add-crew-card h3{font-size:14px;font-weight:600;margin-bottom:14px;color:var(--text2)}
+.form-row{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+@media(max-width:500px){.form-row{grid-template-columns:1fr}}
+.field{display:flex;flex-direction:column;gap:5px}
+.field label{font-size:12px;font-weight:600;color:var(--text3);text-transform:uppercase;letter-spacing:.04em}
+.field input,.field select,.field textarea{padding:9px 12px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;background:var(--surface);color:var(--text);transition:border-color .15s}
+.field input:focus,.field select:focus,.field textarea:focus{outline:none;border-color:var(--navy);box-shadow:0 0 0 3px rgba(15,30,61,0.08)}
+.field textarea{height:75px;resize:vertical}
+.field select[multiple]{height:80px;padding:6px 8px}
+
+/* ── MODAL ── */
+.overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.5);z-index:200;align-items:center;justify-content:center;padding:16px}
+.overlay.open{display:flex}
+.modal{background:var(--surface);border-radius:var(--radius-lg);width:min(540px,100%);max-height:90vh;overflow-y:auto;box-shadow:var(--shadow-lg)}
+.modal-header{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between}
+.modal-header h2{font-size:16px;font-weight:600}
+.modal-close{width:30px;height:30px;border:none;background:none;cursor:pointer;font-size:20px;color:var(--text3);border-radius:6px;display:flex;align-items:center;justify-content:center}
+.modal-close:hover{background:var(--bg)}
+.modal-body{padding:20px;display:flex;flex-direction:column;gap:14px}
+.modal-footer{padding:14px 20px;border-top:1px solid var(--border);display:flex;gap:8px;justify-content:flex-end}
+.btn-cancel{padding:8px 16px;border:1px solid var(--border);border-radius:var(--radius);font-size:13px;font-weight:500;cursor:pointer;background:var(--surface);color:var(--text2)}
+.btn-cancel:hover{background:var(--bg)}
+.btn-submit{padding:8px 20px;background:var(--navy);color:#fff;border:none;border-radius:var(--radius);font-size:13px;font-weight:600;cursor:pointer;transition:background .15s}
+.btn-submit:hover{background:var(--navy-mid)}
+.btn-submit.danger{background:var(--red)}
+
+/* ── USER SELECT SCREEN ── */
+.user-screen{position:fixed;inset:0;background:var(--navy);z-index:500;display:flex;flex-direction:column;align-items:center;justify-content:center;padding:20px}
+.user-screen h1{color:#fff;font-size:24px;font-weight:600;margin-bottom:6px}
+.user-screen p{color:rgba(255,255,255,0.55);font-size:14px;margin-bottom:30px;font-family:var(--mono)}
+.user-list{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:10px;width:100%;max-width:500px;margin-bottom:20px}
+.user-pick-btn{background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);border-radius:var(--radius-lg);padding:16px;text-align:center;cursor:pointer;transition:all .15s}
+.user-pick-btn:hover{background:rgba(255,255,255,0.15);border-color:var(--accent)}
+.user-pick-btn .big-av{width:48px;height:48px;border-radius:50%;background:var(--navy-mid);margin:0 auto 8px;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:600;color:var(--accent);border:2px solid rgba(255,255,255,0.1)}
+.user-pick-btn .upname{color:#fff;font-size:14px;font-weight:600}
+.user-pick-btn .uprole{color:rgba(255,255,255,0.5);font-size:11px;margin-top:2px}
+.add-self{color:rgba(255,255,255,0.6);font-size:13px;cursor:pointer;text-decoration:underline;margin-top:4px}
+.add-self:hover{color:#fff}
+
+/* ── LIGHTBOX ── */
+.lightbox{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.9);z-index:1000;align-items:center;justify-content:center}
+.lightbox.open{display:flex}
+.lightbox img{max-width:95vw;max-height:90vh;border-radius:8px}
+.lightbox-close{position:fixed;top:16px;right:16px;width:36px;height:36px;background:rgba(255,255,255,0.15);border:none;border-radius:50%;color:#fff;font-size:20px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+
+/* ── PHOTO VIEWER CAPTION ── */
+.lightbox-caption{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:rgba(0,0,0,0.7);color:#fff;padding:6px 16px;border-radius:20px;font-size:12px;font-family:var(--mono)}
+
+/* ── EMPTY ── */
+.empty-state{text-align:center;padding:60px 20px;color:var(--text3)}
+.empty-state .icon{font-size:48px;margin-bottom:12px}
+.empty-state p{font-size:14px}
+
+/* ── PRIORITY BADGE ── */
+.pri-badge-high{background:#fff5f5;color:#c53030;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;font-family:var(--mono)}
+.pri-badge-med{background:#fffaf0;color:#c05621;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;font-family:var(--mono)}
+.pri-badge-low{background:#f0fff4;color:#276749;font-size:10px;padding:2px 7px;border-radius:4px;font-weight:600;font-family:var(--mono)}
+
+/* ── TOAST ── */
+.toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--navy);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:500;z-index:9999;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;box-shadow:var(--shadow-lg)}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+/* ── FIREBASE NOTICE ── */
+.firebase-notice{background:#fffbeb;border:1px solid #f6e05e;border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;font-size:13px;color:#744210;line-height:1.6}
+.firebase-notice strong{display:block;margin-bottom:4px;font-size:14px}
+.firebase-notice code{background:#fef3c7;padding:1px 6px;border-radius:4px;font-family:var(--mono);font-size:12px}
+</style>
+</head>
+<body>
+
+<!-- ══ USER SELECT ══ -->
+<div class="user-screen" id="user-screen">
+  <div class="logo" style="width:52px;height:52px;margin-bottom:18px">
+    <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+  </div>
+  <h1>TSP Scope Tracker</h1>
+  <p>Tesla Self-Perform Temp Power</p>
+  <div class="user-list" id="user-pick-list"></div>
+  <span class="add-self" onclick="showAddUserPrompt()">+ I'm not listed, add me</span>
+</div>
+
+<!-- ══ APP ══ -->
+<div id="app" style="display:none">
+  <div class="topbar">
+    <div class="topbar-left">
+      <div class="logo">
+        <svg viewBox="0 0 24 24"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+      </div>
+      <div>
+        <div class="app-name">TSP Scope Tracker</div>
+        <div class="app-sub">Temp Power · Site Accountability</div>
+      </div>
+    </div>
+    <div class="topbar-right">
+      <div class="user-chip" onclick="logOut()" title="Switch user">
+        <div class="user-avatar" id="header-av">?</div>
+        <span class="user-name-chip" id="header-name">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tab-bar">
+    <div class="tab active" onclick="switchTab('scopes',this)">
+      <span class="tab-icon">📋</span> Scopes
+    </div>
+    <div class="tab" onclick="switchTab('crew',this)">
+      <span class="tab-icon">👷</span> Crew
+    </div>
+    <div class="tab" onclick="switchTab('activity',this)">
+      <span class="tab-icon">📡</span> Activity Log
+    </div>
+  </div>
+
+  <div class="content">
+
+    <!-- SCOPES -->
+    <div class="section active" id="sec-scopes">
+      <div id="firebase-setup-notice" style="display:none">
+        <div class="firebase-notice">
+          <strong>⚡ Setup Required — Connect to Firebase for shared live data</strong>
+          This app stores data in your browser right now (localStorage). To share data across all crew devices in real time, set up a free Firebase project and replace the config in the <code>FIREBASE CONFIG</code> section of the HTML. See the <strong>SETUP_GUIDE.md</strong> file included.
+        </div>
+      </div>
+      <div class="stats-grid" id="stats-grid"></div>
+      <div class="filter-row">
+        <input type="text" id="search-input" placeholder="🔍  Search scope name, ID, location..." oninput="renderTickets()">
+        <select id="filter-status" onchange="renderTickets()">
+          <option value="">All statuses</option>
+          <option value="pending">Pending</option>
+          <option value="in-progress">In Progress</option>
+          <option value="complete">Complete</option>
+          <option value="issue">Issue Flagged</option>
+        </select>
+        <select id="filter-crew" onchange="renderTickets()">
+          <option value="">All crew</option>
+        </select>
+        <button class="btn-new" onclick="openNewScope()">＋ New Scope</button>
+      </div>
+      <div class="ticket-list" id="ticket-list"></div>
+    </div>
+
+    <!-- CREW -->
+    <div class="section" id="sec-crew">
+      <div class="crew-grid" id="crew-grid"></div>
+      <div class="add-crew-card">
+        <h3>➕ Add Crew Member</h3>
+        <div class="form-row" style="margin-bottom:10px">
+          <div class="field">
+            <label>Full Name</label>
+            <input id="new-name" placeholder="e.g. John Ramirez" />
+          </div>
+          <div class="field">
+            <label>Role</label>
+            <input id="new-role" placeholder="e.g. Electrician" />
+          </div>
+        </div>
+        <button class="btn-new" onclick="addCrew()">Add to Team</button>
+      </div>
+    </div>
+
+    <!-- ACTIVITY -->
+    <div class="section" id="sec-activity">
+      <div class="log-list" id="global-log-list"></div>
+    </div>
+
+  </div>
+</div>
+
+<!-- ══ MODALS ══ -->
+
+<!-- New Scope Modal -->
+<div class="overlay" id="modal-scope">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>⚡ New Scope / Ticket</h2>
+      <button class="modal-close" onclick="closeModal('modal-scope')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-row">
+        <div class="field">
+          <label>Ticket ID</label>
+          <input id="m-id" placeholder="TSP-001" />
+        </div>
+        <div class="field">
+          <label>Priority</label>
+          <select id="m-priority">
+            <option value="high">🔴 High</option>
+            <option value="med" selected>🟡 Medium</option>
+            <option value="low">🟢 Low</option>
+          </select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Scope Name</label>
+        <input id="m-name" placeholder="e.g. Panel PDP-A temp connection, GFA Bldg 5" />
+      </div>
+      <div class="form-row">
+        <div class="field">
+          <label>Location / Zone</label>
+          <input id="m-loc" placeholder="e.g. Zone C, Bay 12" />
+        </div>
+        <div class="field">
+          <label>Assign Crew (hold Ctrl/⌘ for multiple)</label>
+          <select id="m-crew" multiple></select>
+        </div>
+      </div>
+      <div class="field">
+        <label>Scope Description / Notes</label>
+        <textarea id="m-desc" placeholder="Describe work to be performed, hazards, special requirements, LOTO needs..."></textarea>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('modal-scope')">Cancel</button>
+      <button class="btn-submit" onclick="saveScope()">Create Scope</button>
+    </div>
+  </div>
+</div>
+
+<!-- Status Update Modal -->
+<div class="overlay" id="modal-status">
+  <div class="modal">
+    <div class="modal-header">
+      <h2 id="status-modal-title">Update Scope</h2>
+      <button class="modal-close" onclick="closeModal('modal-status')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="field">
+        <label>New Status</label>
+        <select id="m-status">
+          <option value="pending">⏸ Pending</option>
+          <option value="in-progress">🔧 In Progress</option>
+          <option value="complete">✅ Complete</option>
+          <option value="issue">⚠️ Issue Flagged</option>
+        </select>
+      </div>
+      <div class="field">
+        <label>Work Note — What was done / issue found</label>
+        <textarea id="m-note" placeholder="Describe what was performed, who was on site, any problems found..."></textarea>
+      </div>
+      <div class="field" id="worker-field-wrap">
+        <label>Logged by (you)</label>
+        <input id="m-worker-display" readonly style="background:var(--bg);color:var(--text3)" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('modal-status')">Cancel</button>
+      <button class="btn-submit" onclick="saveStatus()">Save Update</button>
+    </div>
+  </div>
+</div>
+
+<!-- Photo Caption Modal -->
+<div class="overlay" id="modal-photo-cap">
+  <div class="modal">
+    <div class="modal-header">
+      <h2>📸 Add Photo Note</h2>
+      <button class="modal-close" onclick="closeModal('modal-photo-cap')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div id="photo-preview-wrap" style="text-align:center;margin-bottom:4px"></div>
+      <div class="field">
+        <label>Note / Description (optional)</label>
+        <input id="m-photo-note" placeholder="e.g. Before termination, south side panel" />
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn-cancel" onclick="closeModal('modal-photo-cap')">Cancel</button>
+      <button class="btn-submit" onclick="confirmPhoto()">Save Photo</button>
+    </div>
+  </div>
+</div>
+
+<!-- Lightbox -->
+<div class="lightbox" id="lightbox" onclick="closeLightbox()">
+  <button class="lightbox-close" onclick="closeLightbox()">✕</button>
+  <img id="lb-img" src="" alt="Photo" />
+  <div class="lightbox-caption" id="lb-caption"></div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<!-- Hidden file input -->
+<input type="file" id="file-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">
+
+<script>
+// ══════════════════════════════════════════════
+// STATE — stored in localStorage (swap for Firebase below)
+// ══════════════════════════════════════════════
+let DB = {
+  tickets: [],
+  crew: [
+    { id:'c1', name:'Christian', role:'Lead Electrician' },
+    { id:'c2', name:'Alex Acuna', role:'Electrician' },
+  ],
+  log: [],
+  seq: 1,
+};
+
+let currentUser = null;
+let activeTicketId = null;
+let pendingPhotoData = null;
+
+// ── LocalStorage persistence ──
+function save() {
+  try { localStorage.setItem('tsp-db', JSON.stringify(DB)); } catch(e){}
+}
+function load() {
+  try {
+    const raw = localStorage.getItem('tsp-db');
+    if (raw) DB = JSON.parse(raw);
+  } catch(e){}
+}
+
+// ══════════════════════════════════════════════
+// AUTH — who is using the app right now
+// ══════════════════════════════════════════════
+function showUserScreen() {
+  const ul = document.getElementById('user-pick-list');
+  ul.innerHTML = DB.crew.map(c => `
+    <div class="user-pick-btn" onclick="selectUser('${c.id}')">
+      <div class="big-av">${initials(c.name)}</div>
+      <div class="upname">${c.name}</div>
+      <div class="uprole">${c.role}</div>
+    </div>`).join('');
+  document.getElementById('user-screen').style.display = 'flex';
+  document.getElementById('app').style.display = 'none';
+}
+
+function selectUser(id) {
+  currentUser = DB.crew.find(c => c.id === id);
+  if (!currentUser) return;
+  document.getElementById('user-screen').style.display = 'none';
+  document.getElementById('app').style.display = 'block';
+  document.getElementById('header-av').textContent = initials(currentUser.name);
+  document.getElementById('header-name').textContent = currentUser.name;
+  document.getElementById('firebase-setup-notice').style.display = 'block';
+  renderAll();
+}
+
+function logOut() {
+  currentUser = null;
+  showUserScreen();
+}
+
+function showAddUserPrompt() {
+  const name = prompt('Your full name:');
+  if (!name || !name.trim()) return;
+  const role = prompt('Your role (e.g. Electrician):') || 'Crew';
+  const c = { id:'c'+Date.now(), name:name.trim(), role:role.trim() };
+  DB.crew.push(c);
+  save();
+  showUserScreen();
+}
+
+// ══════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════
+function initials(name) {
+  return name.split(' ').map(w=>w[0]).join('').toUpperCase().slice(0,2);
+}
+function fmtDate(ts) {
+  const d = new Date(ts);
+  return d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'2-digit'})
+    + ' ' + d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});
+}
+function statusBadgeClass(s) {
+  return {pending:'badge-pending','in-progress':'badge-inprogress',complete:'badge-complete',issue:'badge-issue'}[s]||'badge-pending';
+}
+function statusLabel(s) {
+  return {pending:'Pending','in-progress':'In Progress',complete:'Complete',issue:'Issue'}[s]||s;
+}
+function toast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  setTimeout(()=>el.classList.remove('show'), 2500);
+}
+function logDotClass(type) {
+  return {photo:'photo',status:'status',issue:'issue',create:'create'}[type]||'';
+}
+
+// ══════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════
+function switchTab(id, el) {
+  document.querySelectorAll('.section').forEach(s=>s.classList.remove('active'));
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.getElementById('sec-'+id).classList.add('active');
+  el.classList.add('active');
+  if (id==='crew') renderCrew();
+  if (id==='activity') renderGlobalLog();
+}
+
+// ══════════════════════════════════════════════
+// RENDER
+// ══════════════════════════════════════════════
+function renderAll() { renderStats(); renderTickets(); }
+
+function renderStats() {
+  const t = DB.tickets;
+  const inprog = t.filter(x=>x.status==='in-progress').length;
+  const done = t.filter(x=>x.status==='complete').length;
+  const issues = t.filter(x=>x.status==='issue').length;
+  document.getElementById('stats-grid').innerHTML = `
+    <div class="stat-card"><div class="stat-num">${t.length}</div><div class="stat-lbl">Total Scopes</div></div>
+    <div class="stat-card blue"><div class="stat-num">${inprog}</div><div class="stat-lbl">In Progress</div></div>
+    <div class="stat-card green"><div class="stat-num">${done}</div><div class="stat-lbl">Complete</div></div>
+    <div class="stat-card yellow"><div class="stat-num">${issues}</div><div class="stat-lbl">Issues</div></div>`;
+}
+
+function renderTickets() {
+  // refresh crew filter dropdown
+  const fc = document.getElementById('filter-crew');
+  const fcVal = fc.value;
+  fc.innerHTML = '<option value="">All crew</option>' +
+    DB.crew.map(c=>`<option value="${c.id}"${fcVal===c.id?' selected':''}>${c.name}</option>`).join('');
+
+  const search = (document.getElementById('search-input').value||'').toLowerCase();
+  const fSt = document.getElementById('filter-status').value;
+  const fCr = document.getElementById('filter-crew').value;
+
+  let list = DB.tickets.filter(t => {
+    if (fSt && t.status !== fSt) return false;
+    if (fCr && !(t.crew||[]).includes(fCr)) return false;
+    if (search && !t.id.toLowerCase().includes(search) &&
+        !t.name.toLowerCase().includes(search) &&
+        !(t.location||'').toLowerCase().includes(search)) return false;
+    return true;
+  }).sort((a,b) => b.createdAt - a.createdAt);
+
+  const container = document.getElementById('ticket-list');
+  if (!list.length) {
+    container.innerHTML = `<div class="empty-state"><div class="icon">📋</div><p>No scopes yet. Hit <strong>New Scope</strong> to get started.</p></div>`;
+    return;
+  }
+
+  container.innerHTML = list.map(t => {
+    const crewNames = (t.crew||[]).map(cid => {
+      const c = DB.crew.find(x=>x.id===cid);
+      return c ? c.name : cid;
+    });
+    const photos = t.photos||[];
+    const log = t.log||[];
+    const priBadge = {high:'<span class="pri-badge-high">HIGH</span>',med:'<span class="pri-badge-med">MED</span>',low:'<span class="pri-badge-low">LOW</span>'}[t.priority]||'';
+    
+    const photoGrid = photos.map((p,i) => `
+      <div class="photo-thumb">
+        <img src="${p.data}" alt="Photo" onclick="openLightbox('${t.id}',${i})">
+        <div class="photo-worker">${p.worker||''} ${p.note?'· '+p.note:''}</div>
+        <button class="photo-del" onclick="deletePhoto('${t.id}',${i})" title="Delete photo">✕</button>
+      </div>`).join('');
+
+    const logEntries = log.slice().reverse().map(e => `
+      <div class="log-entry">
+        <div class="log-dot-wrap"><div class="log-dot ${e.type==='photo'?'photo':e.status==='issue'?'issue':'status'}"></div></div>
+        <div class="log-body">
+          <div class="log-text"><strong>${e.worker}</strong> — ${e.note}
+            <span class="status-tag ${statusBadgeClass(e.status)}">${statusLabel(e.status)}</span>
+          </div>
+          <div class="log-time">${fmtDate(e.ts)}</div>
+        </div>
+      </div>`).join('');
+
+    return `
+    <div class="ticket-card pri-${t.priority}" id="tc-${t.id}">
+      <div class="ticket-head" onclick="toggleCard('${t.id}')">
+        <div class="tc-main">
+          <div class="tc-id">${t.id}</div>
+          <div class="tc-title">${t.name}</div>
+          <div class="tc-meta">
+            <span class="badge ${statusBadgeClass(t.status)}">${statusLabel(t.status)}</span>
+            ${priBadge}
+            ${t.location?`<span class="meta-icon">📍 ${t.location}</span>`:''}
+            ${crewNames.map(n=>`<span class="badge badge-crew">${n}</span>`).join('')}
+            ${photos.length?`<span class="meta-icon">📸 ${photos.length}</span>`:''}
+            ${log.length?`<span class="meta-icon">📝 ${log.length}</span>`:''}
+          </div>
+        </div>
+        <div class="tc-actions" onclick="event.stopPropagation()">
+          <button class="icon-btn success" title="Update status" onclick="openStatusModal('${t.id}')">✏️</button>
+          <button class="icon-btn" title="Add photo" onclick="startPhotoUpload('${t.id}')">📷</button>
+          <button class="icon-btn danger" title="Delete scope" onclick="deleteScope('${t.id}')">🗑</button>
+        </div>
+      </div>
+      <div class="expand-body" id="exp-${t.id}">
+        <div class="expand-grid">
+          <div>
+            <div class="info-block">
+              <div class="info-label">Description</div>
+              <div class="info-value">${t.desc||'No description provided.'}</div>
+            </div>
+            <div class="info-block" style="margin-top:10px">
+              <div class="info-label">Created</div>
+              <div class="info-value" style="font-family:var(--mono);font-size:12px">${fmtDate(t.createdAt)}</div>
+            </div>
+          </div>
+          <div>
+            <div class="info-block">
+              <div class="info-label">Assigned Crew</div>
+              <div class="crew-chips">
+                ${crewNames.length
+                  ? crewNames.map(n=>`<span class="badge badge-crew">${n}</span>`).join('')
+                  : '<span style="font-size:12px;color:var(--text3)">None assigned</span>'}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div class="photo-section">
+          <div class="section-title">
+            <span>📸 Work Photos (${photos.length})</span>
+          </div>
+          <div class="photo-grid" id="pg-${t.id}">
+            ${photoGrid}
+            <div class="photo-add-btn" onclick="startPhotoUpload('${t.id}')">
+              <span>+</span><span>Add Photo</span>
+            </div>
+          </div>
+        </div>
+
+        <div>
+          <div class="section-title">📋 Activity Log (${log.length} entries)</div>
+          <div class="log-list">
+            ${log.length ? logEntries : '<div style="font-size:12px;color:var(--text3);padding:8px 0">No activity logged yet.</div>'}
+          </div>
+        </div>
+      </div>
+    </div>`;
+  }).join('');
+  renderStats();
+}
+
+function toggleCard(id) {
+  document.getElementById('tc-'+id).classList.toggle('open');
+}
+
+function renderCrew() {
+  const el = document.getElementById('crew-grid');
+  el.innerHTML = DB.crew.map(c => {
+    const scopeCount = DB.tickets.filter(t=>(t.crew||[]).includes(c.id)).length;
+    return `
+    <div class="crew-card">
+      <div class="avatar" style="background:${avatarColor(c.name)}">${initials(c.name)}</div>
+      <div style="flex:1;min-width:0">
+        <div class="crew-name">${c.name}</div>
+        <div class="crew-role">${c.role}</div>
+        <div class="crew-scopes">${scopeCount} scope${scopeCount!==1?'s':''} assigned</div>
+      </div>
+      <button class="icon-btn danger" onclick="removeCrew('${c.id}')" title="Remove">🗑</button>
+    </div>`;
+  }).join('');
+}
+
+function avatarColor(name) {
+  const colors = ['#0f1e3d','#1e40af','#065f46','#7c2d12','#4c1d95','#9f1239'];
+  let h = 0; for (let i=0;i<name.length;i++) h = name.charCodeAt(i)+h*31;
+  return colors[Math.abs(h) % colors.length];
+}
+
+function renderGlobalLog() {
+  const el = document.getElementById('global-log-list');
+  const log = (DB.log||[]).slice(0,100);
+  if (!log.length) { el.innerHTML = '<div class="empty-state"><div class="icon">📡</div><p>No activity yet.</p></div>'; return; }
+  el.innerHTML = log.map(e => `
+    <div class="log-entry">
+      <div class="log-dot-wrap"><div class="log-dot ${logDotClass(e.type)}"></div></div>
+      <div class="log-body">
+        <div class="log-text">${e.text}</div>
+        <div class="log-time">${fmtDate(e.ts)}</div>
+      </div>
+    </div>`).join('');
+}
+
+// ══════════════════════════════════════════════
+// SCOPES CRUD
+// ══════════════════════════════════════════════
+function openNewScope() {
+  const sel = document.getElementById('m-crew');
+  sel.innerHTML = DB.crew.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  document.getElementById('m-id').value = 'TSP-'+String(DB.seq).padStart(3,'0');
+  ['m-name','m-loc','m-desc'].forEach(x=>document.getElementById(x).value='');
+  document.getElementById('m-priority').value = 'med';
+  openModal('modal-scope');
+}
+
+function saveScope() {
+  const id = document.getElementById('m-id').value.trim();
+  const name = document.getElementById('m-name').value.trim();
+  if (!id || !name) { toast('Ticket ID and scope name are required.'); return; }
+  const sel = document.getElementById('m-crew');
+  const crew = Array.from(sel.selectedOptions).map(o=>o.value);
+  const t = {
+    id, name,
+    location: document.getElementById('m-loc').value.trim(),
+    desc: document.getElementById('m-desc').value.trim(),
+    priority: document.getElementById('m-priority').value,
+    status: 'pending',
+    crew, photos: [], log: [],
+    createdAt: Date.now(),
+    createdBy: currentUser.name,
+  };
+  DB.tickets.push(t);
+  DB.seq++;
+  addLog(`Scope <strong>${id}</strong> created: "${name}" — by ${currentUser.name}`, 'create');
+  save(); closeModal('modal-scope'); renderAll();
+  toast('Scope created ✓');
+}
+
+function deleteScope(id) {
+  if (!confirm('Delete this scope permanently? This cannot be undone.')) return;
+  DB.tickets = DB.tickets.filter(t=>t.id!==id);
+  addLog(`Scope <strong>${id}</strong> deleted by ${currentUser.name}`, 'status');
+  save(); renderAll();
+  toast('Scope deleted');
+}
+
+// ══════════════════════════════════════════════
+// STATUS UPDATE
+// ══════════════════════════════════════════════
+function openStatusModal(id) {
+  activeTicketId = id;
+  const t = DB.tickets.find(x=>x.id===id);
+  document.getElementById('status-modal-title').textContent = '✏️ Update: ' + t.name;
+  document.getElementById('m-status').value = t.status;
+  document.getElementById('m-note').value = '';
+  document.getElementById('m-worker-display').value = currentUser.name;
+  openModal('modal-status');
+}
+
+function saveStatus() {
+  const t = DB.tickets.find(x=>x.id===activeTicketId);
+  const status = document.getElementById('m-status').value;
+  const note = document.getElementById('m-note').value.trim() || 'Status updated';
+  t.status = status;
+  const entry = { status, note, worker: currentUser.name, ts: Date.now(), type:'status' };
+  t.log = t.log||[];
+  t.log.push(entry);
+  const logType = status==='issue'?'issue':'status';
+  addLog(`<strong>${currentUser.name}</strong> updated <strong>${t.id}</strong> → ${statusLabel(status)}: ${note}`, logType);
+  save(); closeModal('modal-status'); renderAll();
+  toast('Status updated ✓');
+}
+
+// ══════════════════════════════════════════════
+// PHOTOS
+// ══════════════════════════════════════════════
+function startPhotoUpload(id) {
+  activeTicketId = id;
+  document.getElementById('file-input').click();
+}
+
+function handlePhoto(e) {
+  const file = e.target.files[0]; if (!file) return;
+  const reader = new FileReader();
+  reader.onload = ev => {
+    pendingPhotoData = ev.target.result;
+    // show preview + caption modal
+    document.getElementById('photo-preview-wrap').innerHTML =
+      `<img src="${pendingPhotoData}" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:contain">`;
+    document.getElementById('m-photo-note').value = '';
+    openModal('modal-photo-cap');
+  };
+  reader.readAsDataURL(file);
+  e.target.value = '';
+}
+
+function confirmPhoto() {
+  const t = DB.tickets.find(x=>x.id===activeTicketId);
+  const note = document.getElementById('m-photo-note').value.trim();
+  t.photos = t.photos||[];
+  t.photos.push({ data: pendingPhotoData, worker: currentUser.name, note, ts: Date.now() });
+  t.log = t.log||[];
+  t.log.push({ status: t.status, note:'Photo added: '+(note||file), worker: currentUser.name, ts: Date.now(), type:'photo' });
+  addLog(`<strong>${currentUser.name}</strong> added photo to <strong>${t.id}</strong>${note?': '+note:''}`, 'photo');
+  pendingPhotoData = null;
+  save(); closeModal('modal-photo-cap'); renderAll();
+  // auto-expand that card
+  const card = document.getElementById('tc-'+activeTicketId);
+  if (card && !card.classList.contains('open')) card.classList.add('open');
+  toast('Photo saved ✓');
+}
+
+function deletePhoto(ticketId, idx) {
+  if (!confirm('Remove this photo?')) return;
+  const t = DB.tickets.find(x=>x.id===ticketId);
+  t.photos.splice(idx,1);
+  addLog(`<strong>${currentUser.name}</strong> removed photo from <strong>${ticketId}</strong>`, 'photo');
+  save(); renderAll();
+}
+
+function openLightbox(ticketId, idx) {
+  const t = DB.tickets.find(x=>x.id===ticketId);
+  const p = t.photos[idx];
+  document.getElementById('lb-img').src = p.data;
+  document.getElementById('lb-caption').textContent = [p.worker, p.note, fmtDate(p.ts)].filter(Boolean).join(' · ');
+  document.getElementById('lightbox').classList.add('open');
+}
+function closeLightbox() { document.getElementById('lightbox').classList.remove('open'); }
+
+// ══════════════════════════════════════════════
+// CREW
+// ══════════════════════════════════════════════
+function addCrew() {
+  const name = document.getElementById('new-name').value.trim();
+  const role = document.getElementById('new-role').value.trim();
+  if (!name) { toast('Name is required'); return; }
+  const c = { id:'c'+Date.now(), name, role:role||'Crew' };
+  DB.crew.push(c);
+  addLog(`<strong>${currentUser.name}</strong> added crew member: ${name}`, 'create');
+  document.getElementById('new-name').value = '';
+  document.getElementById('new-role').value = '';
+  save(); renderCrew();
+  toast(name+' added ✓');
+}
+
+function removeCrew(id) {
+  const c = DB.crew.find(x=>x.id===id);
+  if (!confirm(`Remove ${c?c.name:'this crew member'}?`)) return;
+  DB.crew = DB.crew.filter(x=>x.id!==id);
+  save(); renderCrew();
+  toast('Crew member removed');
+}
+
+// ══════════════════════════════════════════════
+// LOG
+// ══════════════════════════════════════════════
+function addLog(text, type) {
+  DB.log = DB.log||[];
+  DB.log.unshift({ text, type, ts: Date.now() });
+  if (DB.log.length > 500) DB.log = DB.log.slice(0,500);
+}
+
+// ══════════════════════════════════════════════
+// MODAL HELPERS
+// ══════════════════════════════════════════════
+function openModal(id) { document.getElementById(id).classList.add('open'); }
+function closeModal(id) { document.getElementById(id).classList.remove('open'); }
+
+// Close modal on overlay click
+document.querySelectorAll('.overlay').forEach(el => {
+  el.addEventListener('click', function(e) {
+    if (e.target === this) this.classList.remove('open');
+  });
+});
+
+// ══════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════
+load();
+showUserScreen();
+</script>
+</body>
+</html>
