@@ -270,8 +270,8 @@ button,input,select,textarea{font-family:var(--sans)}
     <div class="section active" id="sec-scopes">
       <div id="firebase-setup-notice" style="display:none">
         <div class="firebase-notice">
-          <strong>⚡ Setup Required — Connect to Firebase for shared live data</strong>
-          This app stores data in your browser right now (localStorage). To share data across all crew devices in real time, set up a free Firebase project and replace the config in the <code>FIREBASE CONFIG</code> section of the HTML. See the <strong>SETUP_GUIDE.md</strong> file included.
+          <strong>Local Storage Mode</strong>
+          Data is saved in your browser only. Connect Firebase for cloud sync.
         </div>
       </div>
       <div class="stats-grid" id="stats-grid"></div>
@@ -437,14 +437,12 @@ button,input,select,textarea{font-family:var(--sans)}
 <input type="file" id="file-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">
 
 <script>
-// ══════════════════════════════════════════════
-// STATE — stored in localStorage (swap for Firebase below)
-// ══════════════════════════════════════════════
+// STATE — stored in localStorage
 let DB = {
   tickets: [],
   crew: [
-    { id:'c1', name:'Christian', role:'Lead Electrician' },
-    { id:'c2', name:'Alex Acuna', role:'Electrician' },
+    { id:'c1', name:'Christian', role:'foreman,Electrician' },
+    { id:'c2', name:'juan salinas', role:'general foreman' },
   ],
   log: [],
   seq: 1,
@@ -824,7 +822,7 @@ function confirmPhoto() {
   t.photos = t.photos||[];
   t.photos.push({ data: pendingPhotoData, worker: currentUser.name, note, ts: Date.now() });
   t.log = t.log||[];
-  t.log.push({ status: t.status, note:'Photo added: '+(note||file), worker: currentUser.name, ts: Date.now(), type:'photo' });
+  t.log.push({ status: t.status, note: note ? 'Photo added: '+note : 'Photo added', worker: currentUser.name, ts: Date.now(), type:'photo' });
   addLog(`<strong>${currentUser.name}</strong> added photo to <strong>${t.id}</strong>${note?': '+note:''}`, 'photo');
   pendingPhotoData = null;
   save(); closeModal('modal-photo-cap'); renderAll();
@@ -903,5 +901,6 @@ document.querySelectorAll('.overlay').forEach(el => {
 load();
 showUserScreen();
 </script>
+
 </body>
 </html>
