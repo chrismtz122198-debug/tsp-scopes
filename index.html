@@ -213,10 +213,6 @@ button,input,select,textarea{font-family:var(--sans)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%) translateY(80px);background:var(--navy);color:#fff;padding:10px 20px;border-radius:20px;font-size:13px;font-weight:500;z-index:9999;opacity:0;transition:all .3s;pointer-events:none;white-space:nowrap;box-shadow:var(--shadow-lg)}
 .toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
 
-/* ── FIREBASE NOTICE ── */
-.firebase-notice{background:#fffbeb;border:1px solid #f6e05e;border-radius:var(--radius);padding:14px 16px;margin-bottom:16px;font-size:13px;color:#744210;line-height:1.6}
-.firebase-notice strong{display:block;margin-bottom:4px;font-size:14px}
-.firebase-notice code{background:#fef3c7;padding:1px 6px;border-radius:4px;font-family:var(--mono);font-size:12px}
 </style>
 </head>
 <body>
@@ -268,12 +264,6 @@ button,input,select,textarea{font-family:var(--sans)}
 
     <!-- SCOPES -->
     <div class="section active" id="sec-scopes">
-      <div id="firebase-setup-notice" style="display:none">
-        <div class="firebase-notice">
-          <strong>Local Storage Mode</strong>
-          Data is saved in your browser only. Connect Firebase for cloud sync.
-        </div>
-      </div>
       <div class="stats-grid" id="stats-grid"></div>
       <div class="filter-row">
         <input type="text" id="search-input" placeholder="🔍  Search scope name, ID, location..." oninput="renderTickets()">
@@ -436,32 +426,72 @@ button,input,select,textarea{font-family:var(--sans)}
 <!-- Hidden file input -->
 <input type="file" id="file-input" accept="image/*" capture="environment" style="display:none" onchange="handlePhoto(event)">
 
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
 <script>
-// STATE — stored in localStorage
-let DB = {
-  tickets: [],
-  crew: [
-    { id:'c1', name:'Christian', role:'foreman,Electrician' },
-    { id:'c2', name:'juan salinas', role:'general foreman' },
-  ],
-  log: [],
-  seq: 1,
-};
+// ── SUPABASE CONFIG — paste your project's values here ──
+// Supabase dashboard → Project Settings → API
+const SUPABASE_URL = "https://ogncoasompmeyqaryswc.supabase.co";
+const SUPABASE_ANON_KEY = "sb_publishable_Hyno27SF6YOBSr-wtjatoQ_GXzEDP2U";
+const sb = supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY);
+
+// STATE — kept in sync with Supabase in real time, never written to localStorage
+let DB = { tickets: [], crew: [], log: [] };
 
 let currentUser = null;
 let activeTicketId = null;
-let pendingPhotoData = null;
+let pendingPhotoFile = null;
 
-// ── LocalStorage persistence ──
-function save() {
-  try { localStorage.setItem('tsp-db', JSON.stringify(DB)); } catch(e){}
+function mapTicket(row) {
+  return {
+    id: row.id, name: row.name, location: row.location, desc: row.description,
+    priority: row.priority, status: row.status, crew: row.crew||[],
+    createdAt: row.created_at, createdBy: row.created_by,
+    log: row.log||[], photos: row.photos||[],
+  };
 }
-function load() {
-  try {
-    const raw = localStorage.getItem('tsp-db');
-    if (raw) DB = JSON.parse(raw);
-  } catch(e){}
+
+async function refreshCrew() {
+  const { data, error } = await sb.from('crew').select('*');
+  if (error) { console.error(error); return; }
+  DB.crew = data;
+  if (DB.crew.length === 0) {
+    await sb.from('crew').upsert([
+      { id:'c1', name:'Christian', role:'foreman,Electrician' },
+      { id:'c2', name:'juan salinas', role:'general foreman' },
+    ]);
+    return refreshCrew();
+  }
+  if (!currentUser) showUserScreen();
+  else { renderTickets(); renderCrew(); }
 }
+
+async function refreshTickets() {
+  const { data, error } = await sb.from('tickets').select('*');
+  if (error) { console.error(error); return; }
+  DB.tickets = data.map(mapTicket);
+  renderAll();
+}
+
+async function refreshActivity() {
+  const { data, error } = await sb.from('activity').select('*').order('ts',{ascending:false}).limit(100);
+  if (error) { console.error(error); return; }
+  DB.log = data;
+  renderGlobalLog();
+}
+
+// ══════════════════════════════════════════════
+// SUPABASE SYNC — anonymous sign-in + realtime subscriptions feed DB and re-render
+// ══════════════════════════════════════════════
+sb.auth.signInAnonymously().then(({error}) => {
+  if (error) { console.error('Auth failed:', error); return; }
+  refreshCrew();
+  refreshTickets();
+  refreshActivity();
+  sb.channel('crew-changes').on('postgres_changes', { event:'*', schema:'public', table:'crew' }, refreshCrew).subscribe();
+  sb.channel('tickets-changes').on('postgres_changes', { event:'*', schema:'public', table:'tickets' }, refreshTickets).subscribe();
+  sb.channel('activity-changes').on('postgres_changes', { event:'*', schema:'public', table:'activity' }, refreshActivity).subscribe();
+});
 
 // ══════════════════════════════════════════════
 // AUTH — who is using the app right now
@@ -485,7 +515,6 @@ function selectUser(id) {
   document.getElementById('app').style.display = 'block';
   document.getElementById('header-av').textContent = initials(currentUser.name);
   document.getElementById('header-name').textContent = currentUser.name;
-  document.getElementById('firebase-setup-notice').style.display = 'block';
   renderAll();
 }
 
@@ -494,14 +523,12 @@ function logOut() {
   showUserScreen();
 }
 
-function showAddUserPrompt() {
+async function showAddUserPrompt() {
   const name = prompt('Your full name:');
   if (!name || !name.trim()) return;
   const role = prompt('Your role (e.g. Electrician):') || 'Crew';
-  const c = { id:'c'+Date.now(), name:name.trim(), role:role.trim() };
-  DB.crew.push(c);
-  save();
-  showUserScreen();
+  const { error } = await sb.from('crew').insert({ id:'c'+Date.now(), name:name.trim(), role:role.trim() });
+  if (error) toast('Failed to add you: '+error.message);
 }
 
 // ══════════════════════════════════════════════
@@ -597,7 +624,7 @@ function renderTickets() {
     
     const photoGrid = photos.map((p,i) => `
       <div class="photo-thumb">
-        <img src="${p.data}" alt="Photo" onclick="openLightbox('${t.id}',${i})">
+        <img src="${p.url}" alt="Photo" onclick="openLightbox('${t.id}',${i})">
         <div class="photo-worker">${p.worker||''} ${p.note?'· '+p.note:''}</div>
         <button class="photo-del" onclick="deletePhoto('${t.id}',${i})" title="Delete photo">✕</button>
       </div>`).join('');
@@ -729,40 +756,50 @@ function renderGlobalLog() {
 function openNewScope() {
   const sel = document.getElementById('m-crew');
   sel.innerHTML = DB.crew.map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
-  document.getElementById('m-id').value = 'TSP-'+String(DB.seq).padStart(3,'0');
+  const maxNum = DB.tickets.reduce((max,t) => {
+    const m = /^TSP-(\d+)$/.exec(t.id);
+    return m ? Math.max(max, parseInt(m[1],10)) : max;
+  }, 0);
+  document.getElementById('m-id').value = 'TSP-'+String(maxNum+1).padStart(3,'0');
   ['m-name','m-loc','m-desc'].forEach(x=>document.getElementById(x).value='');
   document.getElementById('m-priority').value = 'med';
   openModal('modal-scope');
 }
 
-function saveScope() {
+async function saveScope() {
   const id = document.getElementById('m-id').value.trim();
   const name = document.getElementById('m-name').value.trim();
   if (!id || !name) { toast('Ticket ID and scope name are required.'); return; }
+  if (DB.tickets.some(t=>t.id===id)) { toast('A scope with that ID already exists.'); return; }
   const sel = document.getElementById('m-crew');
   const crew = Array.from(sel.selectedOptions).map(o=>o.value);
-  const t = {
+  const row = {
     id, name,
     location: document.getElementById('m-loc').value.trim(),
-    desc: document.getElementById('m-desc').value.trim(),
+    description: document.getElementById('m-desc').value.trim(),
     priority: document.getElementById('m-priority').value,
     status: 'pending',
     crew, photos: [], log: [],
-    createdAt: Date.now(),
-    createdBy: currentUser.name,
+    created_at: Date.now(),
+    created_by: currentUser.name,
   };
-  DB.tickets.push(t);
-  DB.seq++;
+  const { error } = await sb.from('tickets').insert(row);
+  if (error) { toast('Failed to create scope: '+error.message); return; }
   addLog(`Scope <strong>${id}</strong> created: "${name}" — by ${currentUser.name}`, 'create');
-  save(); closeModal('modal-scope'); renderAll();
+  closeModal('modal-scope');
   toast('Scope created ✓');
 }
 
-function deleteScope(id) {
+async function deleteScope(id) {
   if (!confirm('Delete this scope permanently? This cannot be undone.')) return;
-  DB.tickets = DB.tickets.filter(t=>t.id!==id);
+  const t = DB.tickets.find(x=>x.id===id);
+  if (t && t.photos && t.photos.length) {
+    const paths = t.photos.map(p=>p.storagePath).filter(Boolean);
+    if (paths.length) await sb.storage.from('photos').remove(paths);
+  }
+  const { error } = await sb.from('tickets').delete().eq('id', id);
+  if (error) { toast('Failed to delete scope: '+error.message); return; }
   addLog(`Scope <strong>${id}</strong> deleted by ${currentUser.name}`, 'status');
-  save(); renderAll();
   toast('Scope deleted');
 }
 
@@ -779,17 +816,17 @@ function openStatusModal(id) {
   openModal('modal-status');
 }
 
-function saveStatus() {
+async function saveStatus() {
   const t = DB.tickets.find(x=>x.id===activeTicketId);
   const status = document.getElementById('m-status').value;
   const note = document.getElementById('m-note').value.trim() || 'Status updated';
-  t.status = status;
   const entry = { status, note, worker: currentUser.name, ts: Date.now(), type:'status' };
-  t.log = t.log||[];
-  t.log.push(entry);
+  const newLog = [...(t.log||[]), entry];
+  const { error } = await sb.from('tickets').update({ status, log: newLog }).eq('id', t.id);
+  if (error) { toast('Failed to update status: '+error.message); return; }
   const logType = status==='issue'?'issue':'status';
   addLog(`<strong>${currentUser.name}</strong> updated <strong>${t.id}</strong> → ${statusLabel(status)}: ${note}`, logType);
-  save(); closeModal('modal-status'); renderAll();
+  closeModal('modal-status');
   toast('Status updated ✓');
 }
 
@@ -803,12 +840,12 @@ function startPhotoUpload(id) {
 
 function handlePhoto(e) {
   const file = e.target.files[0]; if (!file) return;
+  pendingPhotoFile = file;
   const reader = new FileReader();
   reader.onload = ev => {
-    pendingPhotoData = ev.target.result;
-    // show preview + caption modal
+    // local-only preview before upload
     document.getElementById('photo-preview-wrap').innerHTML =
-      `<img src="${pendingPhotoData}" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:contain">`;
+      `<img src="${ev.target.result}" style="max-width:100%;max-height:180px;border-radius:8px;object-fit:contain">`;
     document.getElementById('m-photo-note').value = '';
     openModal('modal-photo-cap');
   };
@@ -816,34 +853,44 @@ function handlePhoto(e) {
   e.target.value = '';
 }
 
-function confirmPhoto() {
+async function confirmPhoto() {
   const t = DB.tickets.find(x=>x.id===activeTicketId);
   const note = document.getElementById('m-photo-note').value.trim();
-  t.photos = t.photos||[];
-  t.photos.push({ data: pendingPhotoData, worker: currentUser.name, note, ts: Date.now() });
-  t.log = t.log||[];
-  t.log.push({ status: t.status, note: note ? 'Photo added: '+note : 'Photo added', worker: currentUser.name, ts: Date.now(), type:'photo' });
+  const file = pendingPhotoFile;
+  if (!file) return;
+  closeModal('modal-photo-cap');
+  toast('Uploading photo…');
+  const photoId = 'p'+Date.now()+Math.random().toString(36).slice(2,7);
+  const storagePath = `${t.id}/${photoId}_${file.name}`;
+  const { error: upErr } = await sb.storage.from('photos').upload(storagePath, file);
+  if (upErr) { toast('Failed to upload photo: '+upErr.message); return; }
+  const { data: urlData } = sb.storage.from('photos').getPublicUrl(storagePath);
+  const newPhotos = [...(t.photos||[]), { id: photoId, url: urlData.publicUrl, storagePath, worker: currentUser.name, note, ts: Date.now() }];
+  const newLog = [...(t.log||[]), { status: t.status, note: note ? 'Photo added: '+note : 'Photo added', worker: currentUser.name, ts: Date.now(), type:'photo' }];
+  const { error } = await sb.from('tickets').update({ photos: newPhotos, log: newLog }).eq('id', t.id);
+  if (error) { toast('Failed to save photo: '+error.message); return; }
   addLog(`<strong>${currentUser.name}</strong> added photo to <strong>${t.id}</strong>${note?': '+note:''}`, 'photo');
-  pendingPhotoData = null;
-  save(); closeModal('modal-photo-cap'); renderAll();
-  // auto-expand that card
+  pendingPhotoFile = null;
   const card = document.getElementById('tc-'+activeTicketId);
   if (card && !card.classList.contains('open')) card.classList.add('open');
   toast('Photo saved ✓');
 }
 
-function deletePhoto(ticketId, idx) {
+async function deletePhoto(ticketId, idx) {
   if (!confirm('Remove this photo?')) return;
   const t = DB.tickets.find(x=>x.id===ticketId);
-  t.photos.splice(idx,1);
+  const photo = t.photos[idx];
+  const newPhotos = t.photos.filter((_,i)=>i!==idx);
+  if (photo.storagePath) await sb.storage.from('photos').remove([photo.storagePath]);
+  const { error } = await sb.from('tickets').update({ photos: newPhotos }).eq('id', ticketId);
+  if (error) { toast('Failed to remove photo: '+error.message); return; }
   addLog(`<strong>${currentUser.name}</strong> removed photo from <strong>${ticketId}</strong>`, 'photo');
-  save(); renderAll();
 }
 
 function openLightbox(ticketId, idx) {
   const t = DB.tickets.find(x=>x.id===ticketId);
   const p = t.photos[idx];
-  document.getElementById('lb-img').src = p.data;
+  document.getElementById('lb-img').src = p.url;
   document.getElementById('lb-caption').textContent = [p.worker, p.note, fmtDate(p.ts)].filter(Boolean).join(' · ');
   document.getElementById('lightbox').classList.add('open');
 }
@@ -852,24 +899,23 @@ function closeLightbox() { document.getElementById('lightbox').classList.remove(
 // ══════════════════════════════════════════════
 // CREW
 // ══════════════════════════════════════════════
-function addCrew() {
+async function addCrew() {
   const name = document.getElementById('new-name').value.trim();
   const role = document.getElementById('new-role').value.trim();
   if (!name) { toast('Name is required'); return; }
-  const c = { id:'c'+Date.now(), name, role:role||'Crew' };
-  DB.crew.push(c);
+  const { error } = await sb.from('crew').insert({ id:'c'+Date.now(), name, role: role||'Crew' });
+  if (error) { toast('Failed to add crew member: '+error.message); return; }
   addLog(`<strong>${currentUser.name}</strong> added crew member: ${name}`, 'create');
   document.getElementById('new-name').value = '';
   document.getElementById('new-role').value = '';
-  save(); renderCrew();
   toast(name+' added ✓');
 }
 
-function removeCrew(id) {
+async function removeCrew(id) {
   const c = DB.crew.find(x=>x.id===id);
   if (!confirm(`Remove ${c?c.name:'this crew member'}?`)) return;
-  DB.crew = DB.crew.filter(x=>x.id!==id);
-  save(); renderCrew();
+  const { error } = await sb.from('crew').delete().eq('id', id);
+  if (error) { toast('Failed to remove crew member: '+error.message); return; }
   toast('Crew member removed');
 }
 
@@ -877,9 +923,7 @@ function removeCrew(id) {
 // LOG
 // ══════════════════════════════════════════════
 function addLog(text, type) {
-  DB.log = DB.log||[];
-  DB.log.unshift({ text, type, ts: Date.now() });
-  if (DB.log.length > 500) DB.log = DB.log.slice(0,500);
+  sb.from('activity').insert({ text, type, ts: Date.now() }).then(({error}) => { if (error) console.error(error); });
 }
 
 // ══════════════════════════════════════════════
@@ -895,11 +939,6 @@ document.querySelectorAll('.overlay').forEach(el => {
   });
 });
 
-// ══════════════════════════════════════════════
-// INIT
-// ══════════════════════════════════════════════
-load();
-showUserScreen();
 </script>
 
 </body>
